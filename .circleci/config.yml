@@ -1,0 +1,55 @@
+version: 2
+jobs:
+  build:
+    working_directory: ~/workspace
+    docker:
+      - image: classmethod/techdoc-ja:1.0.2
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - techdoc-{{ .Branch }}-{{ .Revision }}
+            - techdoc-{{ .Branch }}
+      - run:
+          name: System information
+          command: |
+            echo "Node $(node -v)"
+            java -version
+            echo "RedPen $(redpen -v)"
+            echo "textlint $(textlint -v)"
+            gitbook current
+            dot -V
+            aws --version
+      - run:
+          name: Check by RedPen
+          command: find ./content -name "*.md" -type f | xargs redpen -l 0 -L ja -f markdown -c ./config/redpen-conf.xml
+      - run:
+          name: Check by textlint
+          command: textlint ${TEXTLINT_OPTS} --config ./config/textlint.json ./content
+      - run:
+          name: Build
+          command: |
+            gitbook install
+            gitbook build .
+            if [ -n "${PDF_FILENAME}" ]; then
+              gitbook pdf . _book/${PDF_FILENAME}
+            fi
+      - store_artifacts:
+          name: Store artifacts
+          path: _book
+          destination: _book
+      - deploy:
+          name: Deploy artifacts
+          command: |
+            if [ -n "${AWS_S3_LOCATION_MASTER}" -a "${CIRCLE_BRANCH}" == "master" ]; then
+              DEPLOY_LOCATION=${AWS_S3_LOCATION_MASTER}
+            elif [ -n "${AWS_S3_LOCATION_SNAPSHOT}" ]; then
+              DEPLOY_LOCATION=${AWS_S3_LOCATION_SNAPSHOT%/}/${CIRCLE_BRANCH}
+            fi
+            if [ -n "${DEPLOY_LOCATION}" ]; then
+              aws s3 sync _book ${DEPLOY_LOCATION} --delete
+            fi
+      - save_cache:
+          key: techdoc-{{ .Branch }}-{{ .Revision }}
+          paths:
+            - ~/workspace/node_modules
