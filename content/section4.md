@@ -28,3 +28,7 @@
 アリス <-- ボブ: another authentication Response
 @enduml
 ```
+
+## 追加
+
+本システムの内容の詳細は、以下の通りである。
